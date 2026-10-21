@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-build.txt
 
-      - name: Install system deps (Linux: Qt runtime libs)
+      - name: "Install system deps (Linux Qt runtime libs)"
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
