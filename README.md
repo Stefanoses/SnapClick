@@ -13,7 +13,7 @@ It works on **anything on your screen**: games, desktop apps, browsers,
 internal tools, that one website with no API. If you can see it, SnapClick can
 click it.
 
-![placeholder: screenshot of the SnapClick editor]
+![The SnapClick editor: block palette, canvas with a flow, properties panel](docs/screenshot.png)
 
 ## What it looks like in practice
 
