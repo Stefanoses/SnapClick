@@ -57,6 +57,14 @@ jobs:
         if: matrix.artifact == 'linux'
         run: bash scripts/build_linux.sh
 
+      - name: Build AppImage (Linux)
+        if: matrix.artifact == 'linux'
+        run: |
+          python scripts/make_icon.py
+          curl -sL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          bash scripts/build_appimage.sh
+
       - name: Package artifact
         run: python scripts/package_artifact.py
 
@@ -79,4 +87,7 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
-
+          # re-releases of the same tag stay clean: replace same-named files
+          # and drop assets from earlier runs (e.g. the old self-extracting .sh)
+          overwrite_files: true
+          prune_files: true

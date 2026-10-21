@@ -20,7 +20,15 @@ DATA_DIRNAME = "snapclick-data"
 
 
 def app_dir() -> Path:
-    """Directory of the executable (frozen) or of the repository root."""
+    """Directory of the executable (frozen) or of the repository root.
+
+    Inside an AppImage ``sys.executable`` points at a temporary squashfs
+    mount (read-only), so we anchor the data folder to the ``.AppImage``
+    file itself via the ``APPIMAGE`` environment variable.
+    """
+    appimage = os.environ.get("APPIMAGE")
+    if appimage:
+        return Path(appimage).resolve().parent
     if getattr(sys, "frozen", False):  # PyInstaller
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]

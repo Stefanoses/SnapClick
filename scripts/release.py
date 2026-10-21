@@ -11,7 +11,7 @@ What it does:
   4. pushes ``main`` and the tag to ``origin``
   5. builds the standalone bundle for the current OS
      (``scripts/build_windows.bat`` / ``scripts/build_linux.sh``)
-     and packages it into ``dist/`` (zip on Windows, .sh on Linux)
+     and packages it into ``dist/`` (zip on Windows, tar.gz on Linux)
 
 The GitHub release itself is created by the CI workflow
 (``.github/workflows/release.yml``) when the tag lands on GitHub: it

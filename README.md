@@ -58,12 +58,17 @@ Grab the latest release from the [Releases page](../../releases):
 | Platform | File | How |
 |---|---|---|
 | Windows 10/11 | `SnapClick-x.y.z-windows.zip` | unzip, run `SnapClick.exe` |
-| Linux (X11) | `SnapClick-x.y.z-linux.sh` | `sh SnapClick-x.y.z-linux.sh` then `./SnapClick-x.y.z/SnapClick` |
+| Linux (X11) | `SnapClick-x.y.z-x86_64.AppImage` | `chmod +x` it, then double-click or run it |
+| Linux (no FUSE) | `SnapClick-x.y.z-linux.tar.gz` | `tar xzf` it, then `./SnapClick-x.y.z/SnapClick` |
+
+Both Linux builds are portable: settings, projects and logs live in a
+`snapclick-data/` folder next to the file you run.
 
 > **Heads up (Windows):** builds are unsigned, so SmartScreen may warn on
 > first launch — *More info → Run anyway*.
 > **Heads up (Linux):** you need an **X11/Xorg session**; Wayland is not
-> supported (the app tells you clearly if it finds one).
+> supported (the app tells you clearly if it finds one). If the AppImage
+> complains about FUSE, use the `.tar.gz` instead.
 
 ## Your first scenario
 
@@ -123,7 +128,9 @@ python -m pytest tests -q    # 117 tests, no display or real apps required
 pip install -r requirements-build.txt
 scripts/build_windows.bat      # Windows -> dist\SnapClick.exe
 bash scripts/build_linux.sh    # Linux   -> dist/SnapClick
-python scripts/package_artifact.py   # zip / self-extracting .sh in dist/
+python scripts/make_icon.py    # packaging/snapclick.png (AppImage icon)
+bash scripts/build_appimage.sh # Linux   -> dist/SnapClick-<ver>-x86_64.AppImage
+python scripts/package_artifact.py   # zip / tar.gz in dist/
 ```
 
 Releasing a new version is one command:
