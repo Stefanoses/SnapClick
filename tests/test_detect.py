@@ -1,6 +1,7 @@
 """Testy autodetekcji platformy (wstrzykiwalne sys/os.environ)."""
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -48,6 +49,8 @@ def test_unknown_os():
         create_backends(info)
 
 
+@pytest.mark.skipif(sys.platform != "win32",
+                    reason="backend Win32 (ctypes.wintypes) tylko na Windows")
 def test_windows_backend_bundle_created():
     """Na Windows bundle: mss + input przez SendInput (wymaga pydirectinput)."""
     info = detect_platform(SimpleNamespace(platform="win32"), {})
