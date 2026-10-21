@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "name": "demo_click_loop",
+  "window_title": "",
+  "monitor": null,
+  "templates": [
+    {
+      "id": "confirm_yes",
+      "file": "confirm_yes.png"
+    },
+    {
+      "id": "open_button",
+      "file": "open_button.png"
+    },
+    {
+      "id": "target_item",
+      "file": "target_item.png"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "ebcf83c41d",
+      "type": "start",
+      "x": 0,
+      "y": 0,
+      "params": {},
+      "next": "d5fc36a5c3"
+    },
+    {
+      "id": "d5fc36a5c3",
+      "type": "click",
+      "x": 0,
+      "y": 60,
+      "params": {
+        "template": "open_button",
+        "button": "left",
+        "double": false,
+        "focus": "auto",
+        "offset_x": 0,
+        "offset_y": 0,
+        "threshold": 0.9,
+        "timeout": 5.0,
+        "poll": 0.15,
+        "region": "window",
+        "window_title": "",
+        "custom_region": "0,0,0,0",
+        "monitor": null,
+        "post_wait": 0.8,
+        "on_fail": "stop"
+      },
+      "next": "c189437706"
+    },
+    {
+      "id": "c189437706",
+      "type": "wait",
+      "x": 0,
+      "y": 120,
+      "params": {
+        "seconds": 1.0
+      },
+      "next": "4e83e38a78"
+    },
+    {
+      "id": "4e83e38a78",
+      "type": "while_found",
+      "x": 0,
+      "y": 176,
+      "params": {
+        "template": "target_item",
+        "threshold": 0.9,
+        "max_iterations": 50,
+        "iteration_delay": 0.4,
+        "region": "window",
+        "window_title": "",
+        "custom_region": "0,0,0,0",
+        "monitor": null
+      },
+      "next": "2e55653512",
+      "body": "f304b2f80f"
+    },
+    {
+      "id": "f304b2f80f",
+      "type": "click",
+      "x": 20,
+      "y": 220,
+      "params": {
+        "template": "target_item",
+        "button": "left",
+        "double": false,
+        "focus": "auto",
+        "offset_x": 0,
+        "offset_y": 0,
+        "threshold": 0.9,
+        "timeout": 5.0,
+        "poll": 0.15,
+        "region": "window",
+        "window_title": "",
+        "custom_region": "0,0,0,0",
+        "monitor": null,
+        "post_wait": 0.5,
+        "on_fail": "stop"
+      },
+      "next": "7fe1269496"
+    },
+    {
+      "id": "7fe1269496",
+      "type": "click",
+      "x": 20,
+      "y": 280,
+      "params": {
+        "template": "confirm_yes",
+        "button": "left",
+        "double": false,
+        "focus": "auto",
+        "offset_x": 0,
+        "offset_y": 0,
+        "threshold": 0.9,
+        "timeout": 2.0,
+        "poll": 0.15,
+        "region": "window",
+        "window_title": "",
+        "custom_region": "0,0,0,0",
+        "monitor": null,
+        "post_wait": 0.25,
+        "on_fail": "continue"
+      }
+    },
+    {
+      "id": "2e55653512",
+      "type": "wait",
+      "x": 0,
+      "y": 340,
+      "params": {
+        "seconds": 0.3
+      }
+    }
+  ]
+}

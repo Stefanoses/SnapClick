@@ -1,0 +1,19 @@
+# GUI (canvas blokowy, okna dialogowe)
+PySide6>=6.6
+
+# Wizja komputerowa
+opencv-python>=4.9
+numpy>=1.26
+
+# Szybkie zrzuty ekranu (Windows + Linux/X11)
+mss>=9.0
+
+# Globalny hotkey STOP + awaryjne zdarzenia klawiatury
+pynput>=1.7
+
+# Input specyficzny dla platform
+pydirectinput>=1.0.1; sys_platform == "win32"
+python-xlib>=0.33; sys_platform == "linux"
+
+# Testy
+pytest>=8.0
