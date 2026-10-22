@@ -71,6 +71,7 @@ class X11InputBackend(_X11Common):
     def __init__(self) -> None:
         super().__init__()
         self._clip_tool = self._detect_clipboard_tool()
+        self._xdotool = shutil.which("xdotool")
 
     @staticmethod
     def _detect_clipboard_tool() -> Optional[str]:
@@ -178,6 +179,125 @@ class X11InputBackend(_X11Common):
 
     _NAMED_KEYS = {"\n": 0xFF0D, "\r": 0xFF0D, "\t": 0xFF09}
 
+    # Kolumny mapowania keycode'a (grupy po 4: L1..L4) -> modyfikatory.
+    # W ukladzie 'pl' (legacy) polskie znaki stoja w grupie 2 (kolumny 4+),
+    # czyli pod AltGr (ISO_Level3_Shift); wielkie litery pod Shift.
+    _SHIFT_KS = 0xFFE1
+    _ALTGR_KS = 0xFE03
+
+    @classmethod
+    def _mods_for_column(cls, idx: int):
+        """Modyfikatory wydobywajace keysym z kolumny `idx` mapowania.
+
+        Tablice Xlib układa w grupy po 4 kolumny (L1, L2=Shift, L3=AltGr,
+        L4=AltGr+Shift). W legacy 'pl' polskie znaki stoja w GRUPIE 2
+        (indeksy 4..7) jako jej baza/Shift — do grupy 2 wchodzi sie przez
+        AltGr (Mode_switch). stad: AltGr gdy grupa>=2 LUB kolumna w grupie
+        to L3/L4; Shift gdy kolumna w grupie to L2/L4.
+        """
+        group, off = divmod(idx, 4)
+        altgr = group >= 1 or off >= 2
+        shift = (off % 2) == 1
+        mods = []
+        if altgr:
+            mods.append(cls._ALTGR_KS)
+        if shift:
+            mods.append(cls._SHIFT_KS)
+        return tuple(mods)
+
+    def _keymap(self, d) -> Dict[int, List[int]]:
+        """Cala tablica mapowania keycode -> keysymy (jedno zapytanie do X).
+
+        Cache'owana na czas jednego type_text — Wine i gry cache'uja te
+        tablice, wiec MUSIMY korzystac z natywnych kombinacji klawiszy,
+        a nie z tymczasowych remapow (patrz _send_char).
+        """
+        lo, hi = _keycode_range(d)
+        try:
+            rows = d.get_keyboard_mapping(lo, hi - lo + 1)
+        except Exception:  # pragma: no cover - bledy protokolu X
+            return {}
+        return {lo + i: list(row) for i, row in enumerate(rows)}
+
+    # Nazwy keysymow legacy (X11/keysymdef.h, blok Latin-2) dla polskich
+    # liter. Uklady typu 'pl' (legacy) definiuja te znaki wlasnie takimi
+    # keysymami — keysym Unicode (0x01000000+cp) nie wystepuje w tablicy,
+    # wiec szukamy obu wariantow.
+    _LEGACY_NAMES = {
+        "ą": "aogonek", "ć": "cacute", "ę": "eogonek", "ł": "lstroke",
+        "ń": "nacute", "ś": "sacute", "ż": "zabovedot", "ź": "zacute",
+        "Ą": "Aogonek", "Ć": "Cacute", "Ę": "Eogonek", "Ł": "Lstroke",
+        "Ń": "Nacute", "Ś": "Sacute", "Ż": "Zabovedot", "Ź": "Zacute",
+    }
+
+    @classmethod
+    def _char_keysyms(cls, ch: str) -> List[int]:
+        """Kandydaci keysym dla znaku: Unicode + legacy (Latin-2)."""
+        out = [cls._keysym_of(ch)]
+        name = cls._LEGACY_NAMES.get(ch)
+        if name:
+            try:
+                from Xlib import XK
+                legacy = XK.keysym_from_string(name)
+                if legacy and legacy not in out:
+                    out.append(legacy)
+            except Exception:  # pragma: no cover - brak XK w mokach
+                pass
+        return out
+
+    def _native_combo(self, d, keysyms,
+                      keymap: Dict[int, List[int]]):
+        """(keycode, modyfikatory) produkujace jeden z keysymow w ukladzie.
+
+        Szuka znaku w kazdej kolumnie (grupy x Shift/AltGr) — tak samo robi
+        xdotool i tak samo uzytkownik wciska klawiature. Zwraca None, gdy
+        uklad nie zna zadnego kandydata (wtedy remap).
+        """
+        wanted = set(keysyms)
+        reserved = {kc for mod in d.get_modifier_mapping() for kc in mod if kc}
+        for code, syms in keymap.items():
+            if code in reserved:
+                continue
+            for level, sym in enumerate(syms):
+                if sym not in wanted or sym == 0:
+                    continue
+                mods = self._mods_for_column(level)
+                # modyfikator musi istniec na tej klawiaturze
+                if any(d.keysym_to_keycode(m) == 0 for m in mods):
+                    continue
+                return code, mods
+        return None
+
+    def _send_char(self, ch: str,
+                   keymap: Optional[Dict[int, List[int]]] = None) -> None:
+        """Wciska klawisz produkujacy znak — natywnie (z modyfikatorami)
+        albo przez remap, jesli uklad w ogole nie zna znaku.
+
+        Regresja (Deck, gra pod Wine): 'Zwoj bogosawiestwa' zamiast
+        'Zwój błogosławieństwa'. Wine cache'uje tablice mapowania klawiatury
+        przy starcie, wiec tymczasowy remap keycode'a (zmiana
+        ChangeKeyboardMapping) jest dla niego NIEWIDZIALNY — klawisz wpadal,
+        ale tlumaczyl sie na znak z ORIGINALNEJ tablicy (albo wcale).
+        Znaki ukladu 'pl' (o/6, s/1, z/z, l/l) sa dostepne jako natywne
+        kombinacje z AltGr — wysylane jak przy recznym pisaniu dzialaja
+        rowniez w Wine. Remap pozostaje ostatecznoscia dla znakow, ktorych
+        uklad nie ma wogole.
+        """
+        d = self.display
+        if keymap is None:
+            keymap = self._keymap(d)
+        keysyms = self._char_keysyms(ch)
+        combo = self._native_combo(d, keysyms, keymap)
+        if combo is not None:
+            code, mods = combo
+            for m in mods:
+                self._send_keycode(d.keysym_to_keycode(m))
+            self._send_keycode(code)
+            for m in reversed(mods):
+                self._send_keycode(d.keysym_to_keycode(m))
+            return
+        self._send_char_via_remap(d, keysyms[0])
+
     def type_text(self, text: str, method: str = "auto") -> None:
         # Normalizacja z globalnym type_method: na X11 "sendinput" i
         # "postmessage" oznaczaja to samo (XTEST / keysymy — tu nie ma hooka
@@ -196,34 +316,30 @@ class X11InputBackend(_X11Common):
                     "Brak narzędzia xclip/xsel — schowek niedostępny. "
                     "Zainstaluj xclip lub użyj method='type'."
                 )
+        if method in ("type", "auto") and self._xdotool is not None:
+            # xdotool type to zloty standard: sam rozwiazuje uklady z grupami
+            # (AltGr), odswieza tablice mapowania i --clearmodifiers odpuszcza
+            # sciete modyfikatory. Dziala rowniez w grach pod Wine, ktore
+            # cache'uja tablice klawiatury (nasz remap ChangeKeyboardMapping
+            # jest dla nich niewidzialny).
+            delay_ms = int(round(get_settings().key_hold_s * 1000))
+            subprocess.run(
+                [self._xdotool, "type", "--clearmodifiers",
+                 "--delay", str(max(delay_ms, 1)), "--", text],
+                check=True)
+            return
         # Metoda "type": kazdy znak musi trafic do celu. Wczesniej znaki bez
         # keycode'u w biezacym ukladzie byly po cichu pomijane (stad "znikajace"
-        # polskie znaki); teraz nadpisujemy tymczasowo wolny keycode (xdotool).
+        # polskie znaki). Tablice mapowania czytamy RAZ na przebieg.
         d = self.display
+        keymap = self._keymap(d)
         for ch in text:
             if ch in self._NAMED_KEYS:
                 self._send_keysym(self._NAMED_KEYS[ch])
                 continue
-            self._send_char(ch)
+            self._send_char(ch, keymap)
             time.sleep(0.01)
         d.sync()
-
-    def _send_char(self, ch: str) -> None:
-        """Wciska klawisz produkujacy znak — natywnie lub przez remap."""
-        d = self.display
-        keysym = self._keysym_of(ch)
-        code = d.keysym_to_keycode(keysym)
-        # Natywnie tylko gdy keysym jest w levelu 1 (bez modyfikatorow) —
-        # inaczej 'A' wcisneloby klawisz 'a' i dalo 'a', a 'ł' mogloby dac 'Ł'.
-        if code:
-            try:
-                unshifted = d.get_keyboard_mapping(code, 1)[0][0]
-            except Exception:  # pragma: no cover - bledy protokolu X
-                unshifted = None
-            if unshifted == keysym:
-                self._send_keycode(code)
-                return
-        self._send_char_via_remap(d, keysym)
 
     def _send_keycode(self, code: int) -> None:
         """KeyPress -> hold -> KeyRelease.

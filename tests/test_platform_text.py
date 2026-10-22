@@ -68,14 +68,20 @@ def test_win_type_text_method_type_keeps_every_char(monkeypatch):
 
 # ----------------------------------------------------------------------- x11
 class FakeDisplay:
-    """Minimalna atrapa Xlib Display z kontrolowana mapa klawiatury PL."""
+    """Minimalna atrapa Xlib Display z kontrolowana mapa klawiatury PL.
+
+    get_keyboard_mapping(code, count) zwraca `count` wierszy (jak prawdziwy
+    Xlib) — _keymap() czyta cala tablice jednym zapytaniem.
+    """
 
     def __init__(self):
         # keysym -> keycode (klawisze natywne ukladu)
         self.sym2code = {0x61: 0x1E,          # a
                          0x41: 0x1E,          # A — ten sam klawisz, level 2
                          0x20: 0x39,          # spacja
-                         0xFF0D: 0x24}        # Return
+                         0xFF0D: 0x24,        # Return
+                         0xFFE1: 50,          # Shift_L
+                         0xFE03: 92}          # ISO_Level3_Shift (AltGr)
         # keycode -> keysym w levelu 1 (bez modyfikatorow)
         self.level1 = {0x1E: 0x61, 0x39: 0x20, 0x24: 0xFF0D,
                        0x27: 0x7B}            # '[' (Enter/level2 '{')
@@ -90,8 +96,8 @@ class FakeDisplay:
         return self.sym2code.get(keysym, 0)
 
     def get_keyboard_mapping(self, code, count):
-        first = self.level1.get(code, 0)
-        return [[first, 0, 0, 0]]              # 1 keysym na 4 levelow
+        return [[self.level1.get(c, 0), 0, 0, 0]
+                for c in range(code, code + count)]
 
     def get_modifier_mapping(self):
         return [(50, 62, 0, 0, 0, 0, 0, 0)] * 8
@@ -118,6 +124,7 @@ def x11_backend():
     backend = X11InputBackend.__new__(X11InputBackend)   # bez laczenia z X
     backend._display = FakeDisplay()
     backend._clip_tool = None
+    backend._xdotool = None            # testy sciezki natywnej, nie xdotool
     backend.events = []
     orig_keycode = backend._send_keycode
 
@@ -162,6 +169,95 @@ def test_x11_native_path_for_plain_keysym(x11_backend):
     backend._send_char("a")
     assert backend.events == [("keycode", 0x1E)]
     assert backend._display.changed == []      # bez remapowania
+
+
+def test_x11_mods_for_column_group2_is_altgr():
+    """Regresja (Deck, Wine): 'pl' to uklad GRUPOWY — polskie znaki stoja w
+    grupie 2 (indeksy 4..7), do ktorej wchodzi sie AltGr-em. Dawna logika
+    patrzyla tylko w kolumny 0..3 grupy 1, wiec 'o' z ogonkiem ladowalo na
+    remap — a Wine cache'uje tablice klawiatury i remapu NIE widzi (stad
+    'bogosawiestwa')."""
+    from snapclick.core.platform.x11 import X11InputBackend as B
+    assert B._mods_for_column(0) == ()
+    assert B._mods_for_column(1) == (0xFFE1,)            # Shift
+    assert B._mods_for_column(2) == (0xFE03,)            # AltGr
+    assert B._mods_for_column(3) == (0xFE03, 0xFFE1)     # AltGr+Shift
+    assert B._mods_for_column(4) == (0xFE03,)            # grupa 2, baza
+    assert B._mods_for_column(5) == (0xFE03, 0xFFE1)     # grupa 2, Shift
+
+
+def test_x11_uppercase_uses_shift_not_remap(x11_backend):
+    """'Z' musi isc jako Shift+keycode 'z' (natywnie), nie przez remap —
+    inaczej gra pod Wine gubi wielkie litery."""
+    backend, _ = x11_backend
+    d = backend._display
+    d.level1[0x1E] = 0x61
+    d.level1_rows = None
+    # kolumna 1 (Shift) tego samego klawisza = 'Z'
+    orig = d.get_keyboard_mapping
+
+    def mapping(code, count):
+        rows = orig(code, count)
+        if code <= 0x1E < code + count:
+            rows[0x1E - code][1] = 0x5A
+        return rows
+    d.get_keyboard_mapping = mapping
+
+    backend._send_char("Z")
+    assert backend._display.changed == [], "Z nie moze byc remapowane"
+    assert backend.events == [("keycode", 50), ("keycode", 0x1E),
+                              ("keycode", 50)]     # Shift press/release
+
+
+def test_x11_group2_char_uses_altgr_not_remap(x11_backend):
+    """'ó' (keysym 0xF3) w grupie 2 ukladu 'pl' -> AltGr + keycode 'o'."""
+    backend, _ = x11_backend
+    d = backend._display
+    orig = d.get_keyboard_mapping
+
+    def mapping(code, count):
+        # prawdziwy 'pl' ma 7 keysymow na keycode (grupy po 4) — fake
+        # domyslnie zwraca 4, tutaj symulujemy pelna szerokosc
+        rows = [list(r) + [0] * 3 for r in orig(code, count)]
+        if code <= 0x20 < code + count:
+            rows[0x20 - code][4] = 0xF3            # grupa 2, baza
+        return rows
+    d.get_keyboard_mapping = mapping
+
+    backend._send_char("ó")
+    assert backend._display.changed == [], "ó nie moze byc remapowane"
+    assert backend.events == [("keycode", 92), ("keycode", 0x20),
+                              ("keycode", 92)]     # AltGr press/release
+
+
+def test_x11_legacy_keysym_candidates():
+    """Uklady legacy definiuja 'ł' jako lstroke (0x1A5), nie keysym Unicode —
+    szukamy obu kandydatow."""
+    pytest.importorskip("Xlib", reason="legacy keysymy przez Xlib.XK")
+    from snapclick.core.platform.x11 import X11InputBackend as B
+    cands = B._char_keysyms("ł")
+    assert 0x01000142 in cands
+    assert 0x1A5 in cands                          # XK_lstroke
+    assert B._char_keysyms("a") == [0x61]
+
+
+def test_x11_type_text_prefers_xdotool(x11_backend, monkeypatch):
+    """xdotool to zloty standard — jezeli jest, 'type' idzie nim (pelne
+    wsparcie ukladow grupowych, widoczne rowniez dla Wine)."""
+    import snapclick.core.platform.x11 as x11
+
+    backend, _ = x11_backend
+    backend._xdotool = "/usr/bin/xdotool"
+    runs = []
+    monkeypatch.setattr(x11.subprocess, "run",
+                        lambda cmd, **kw: runs.append((cmd, kw)))
+    backend.type_text("Zwój błogosławieństwa", method="type")
+    assert len(runs) == 1
+    cmd, kw = runs[0]
+    assert cmd[:2] == ["/usr/bin/xdotool", "type"]
+    assert "--clearmodifiers" in cmd
+    assert cmd[-1] == "Zwój błogosławieństwa"
+    assert backend.events == []                    # bez wlasnego XTEST
 
 
 def test_x11_shifted_char_uses_remap_not_plain_key(x11_backend):
