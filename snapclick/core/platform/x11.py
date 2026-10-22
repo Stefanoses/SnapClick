@@ -116,14 +116,11 @@ class X11InputBackend(_X11Common):
 
     # ---------------------------------------------------------- keyboard
     def _send_keysym(self, keysym: int) -> None:
-        from Xlib.ext import xtest
         d = self.display
         keycode = d.keysym_to_keycode(keysym)
         if keycode == 0:
             raise BackendError(f"Brak keysymu na tej klawiaturze: {keysym:#x}")
-        xtest.fake_input(d, 4, keycode)
-        xtest.fake_input(d, 5, keycode)
-        d.sync()
+        self._send_keycode(keycode)
 
     _MOD_MAP = {  # nazwa -> (keysym modu, bitmaska)
         "ctrl": (0xFFE3, 4), "control": (0xFFE3, 4),
@@ -220,9 +217,19 @@ class X11InputBackend(_X11Common):
         self._send_char_via_remap(d, keysym)
 
     def _send_keycode(self, code: int) -> None:
+        """KeyPress -> hold -> KeyRelease.
+
+        Bez przytrzymania (0 ms) aplikacje odpytujace stan klawiatury
+        (XQueryKeymap, polling DirectInput) moga nie zobaczyc wogole
+        wciśnietego klawisza — stad key_hold_s (jak xdotool --delay).
+        """
         from Xlib.ext import xtest
         d = self.display
         xtest.fake_input(d, 4, code)   # KeyPress
+        d.sync()
+        hold = get_settings().key_hold_s
+        if hold > 0:
+            time.sleep(hold)
         xtest.fake_input(d, 5, code)   # KeyRelease
         d.sync()
 
@@ -252,6 +259,10 @@ class X11InputBackend(_X11Common):
             d.sync()
 
     # ----------------------------------------------------------- clipboard
+    def clipboard_available(self) -> bool:
+        """Czy sciezka clipboard (xclip/xsel) jest w ogole dostepna."""
+        return self._clip_tool is not None
+
     def set_clipboard(self, text: str) -> None:
         if self._clip_tool is None:
             raise BackendError(

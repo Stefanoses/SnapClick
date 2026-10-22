@@ -68,10 +68,12 @@ class InputSettingsDialog(QDialog):
         self.sp_settle = _seconds_spin(st.move_settle_s, 0.0, 2.0, 0.01)
         self.sp_gap = _seconds_spin(st.double_gap_s, 0.01, 1.0, 0.01)
         self.sp_release = _seconds_spin(st.release_settle_s, 0.0, 2.0, 0.01)
+        self.sp_key_hold = _seconds_spin(st.key_hold_s, 0.0, 2.0, 0.005)
         form.addRow(t("set.mouse_hold"), self.sp_hold)
         form.addRow(t("set.move_settle"), self.sp_settle)
         form.addRow(t("set.double_gap"), self.sp_gap)
         form.addRow(t("set.release_settle"), self.sp_release)
+        form.addRow(t("set.key_hold"), self.sp_key_hold)
         root.addWidget(mouse_box)
 
         # --- focus okna
@@ -106,6 +108,7 @@ class InputSettingsDialog(QDialog):
             move_settle_s=self.sp_settle.value(),
             double_gap_s=self.sp_gap.value(),
             release_settle_s=self.sp_release.value(),
+            key_hold_s=self.sp_key_hold.value(),
             focus_enabled=self.cb_focus.isChecked(),
             focus_after_click=self.cb_focus_per_click.isChecked(),
             focus_delay_s=self.sp_focus_delay.value(),
@@ -125,6 +128,7 @@ class InputSettingsDialog(QDialog):
         self.sp_settle.setValue(d.move_settle_s)
         self.sp_gap.setValue(d.double_gap_s)
         self.sp_release.setValue(d.release_settle_s)
+        self.sp_key_hold.setValue(d.key_hold_s)
         self.cb_focus.setChecked(d.focus_enabled)
         self.cb_focus_per_click.setChecked(d.focus_after_click)
         self.sp_focus_delay.setValue(d.focus_delay_s)

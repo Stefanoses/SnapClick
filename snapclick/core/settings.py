@@ -24,6 +24,9 @@ Sens parametrow (dlaczego niektore gry ignoruja klik):
   * ``focus_after_click`` — aktywacja przed KAZDYM kliknieciem (ostatecznosc;
                             wolniejsze, pomaga gdy okno traci focus w trakcie).
   * ``focus_delay_s``     — czas dawany oknu na przejecie focusu po aktywacji.
+  * ``key_hold_s``        — czas miedzy KeyPress a KeyRelease. Impuls 0 ms
+                            bywa gubiony przez aplikacje odpytujace stan
+                            klawiatury (XQueryKeymap / DirectInput polling).
 """
 from __future__ import annotations
 
@@ -46,6 +49,7 @@ class InputSettings:
     move_settle_s: float = 0.05
     double_gap_s: float = 0.05
     release_settle_s: float = 0.02
+    key_hold_s: float = 0.012
     focus_enabled: bool = True
     focus_after_click: bool = False
     focus_delay_s: float = 0.15
@@ -61,6 +65,7 @@ class InputSettings:
             "move_settle_s": (0.0, 2.0),
             "double_gap_s": (0.01, 1.0),
             "release_settle_s": (0.0, 2.0),
+            "key_hold_s": (0.0, 2.0),
             "focus_delay_s": (0.0, 5.0),
         }
         for f in fields(self):

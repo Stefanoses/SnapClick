@@ -203,6 +203,17 @@ def test_x11_click_press_release_have_hold(x11_click_backend, fast_settings):
     assert ev[1][1] == 1                      # przycisk 1 = lewy
 
 
+def test_x11_key_press_release_have_hold(x11_click_backend, fast_settings):
+    """Regresja cichego gubienia klawiszy: KeyPress i KeyRelease musza byc
+    przedzielone key_hold_s (aplikacje pollujace XQueryKeymap nie widza
+    impulsu 0 ms)."""
+    backend, calls = x11_click_backend
+    backend._send_keycode(30)
+    kinds = [c[0] for c in calls]
+    assert kinds == [4, "sleep", 5]            # press -> hold -> release
+    assert calls[1][1] == pytest.approx(0.012)  # domyslny key_hold_s
+
+
 def test_x11_click_double_sends_two_pairs(x11_click_backend, fast_settings):
     backend, calls = x11_click_backend
     backend.click(0, 0, button="right", double=True)
@@ -250,6 +261,62 @@ def build_focus_interp(window: RecordingWindows):
     click.params["post_wait"] = 0.0
     program.set_socket(start.id, "next", click.id)
     return program, interp, inp
+
+
+def build_type_interp(window: RecordingWindows, inp=None):
+    from snapclick.core.engine.events import EventBus
+    from snapclick.core.engine.interpreter import Interpreter
+
+    class _In:
+        def type_text(self, text, method="auto"):
+            self.typed.append((text, method))
+        def __init__(self):
+            self.typed = []
+
+    program = Program(name="type-test", window_title="MyApp")
+    registry = FakeTemplateRegistry({})
+    screen = FakeScreen(lambda region: make_scene(True))
+    inp = inp or _In()
+    interp = Interpreter(program, registry, screen, inp, window, EventBus())
+    start = program.add_block(BlockType.START)
+    tt = program.add_block(BlockType.TYPE_TEXT)
+    tt.params["text"] = "hello"
+    program.set_socket(start.id, "next", tt.id)
+    return program, interp, inp
+
+
+def test_type_text_reactivates_window_before_typing(fast_settings):
+    """Klawiatura trafia do okna z focusem — przed pisaniem focus musi byc
+    odzyskany (regresja: tekst 'znikal' gdy overlay sciagnal focus w trakcie
+    przebiegu)."""
+    win = RecordingWindows()
+    _prog, interp, inp = build_type_interp(win)
+    assert interp.run() == "ok"
+    assert inp.typed == [("hello", "auto")]
+    assert win.activated == ["MyApp", "MyApp"]   # start + tuż przed pisaniem
+
+
+def test_type_text_logs_clipboard_fallback(fast_settings):
+    """'auto' bez xclip/xsel po cichu wpada na XTEST — log MUSI to zglosic."""
+    from snapclick.core.engine.events import EventKind
+
+    class _NoClip:
+        def __init__(self):
+            self.typed = []
+
+        def clipboard_available(self):
+            return False
+
+        def type_text(self, text, method="auto"):
+            self.typed.append((text, method))
+
+    win = RecordingWindows()
+    _prog, interp, inp = build_type_interp(win, inp=_NoClip())
+    seen = []
+    interp.events.subscribe(lambda e: seen.append(e))
+    assert interp.run() == "ok"
+    logs = [e.message for e in seen if e.kind is EventKind.LOG]
+    assert any("Schowek" in m or "clipboard" in m.lower() for m in logs), logs
 
 
 def test_run_activates_window_at_start(fast_settings):

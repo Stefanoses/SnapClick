@@ -273,6 +273,30 @@ class Interpreter:
     def _do_type_text(self, block: Block, ctx: RunContext) -> None:
         text = str(block.param("text") or "")
         method = str(block.param("method") or "auto")
+        # Klawiatura trafia do okna z FOCUSEM WEJSCIA (nie spod kursora) —
+        # jesli scenariusz ma okno docelowe, odzyskujemy focus TUZ przed
+        # pisaniem: overlay/OKO systemowe moglo go sciagnac w trakcie
+        # przebiegu i klawisze znikalyby bez zadnego bledu.
+        if (self.windows is not None and self.program.window_title
+                and get_settings().focus_enabled):
+            try:
+                self.windows.activate(self.program.window_title)
+            except Exception:
+                pass  # focus to ulatwienie, nie warunek konieczny
+        # 'auto' na X11 bez xclip/xsel po cichu wpada na sciezke klawiszowa
+        # (XTEST) — logujemy to, inaczej uzytkownik nie wie ktora sciezka
+        # zostala uzyta (regresja: 'cisze' awarie wpisywania tekstu).
+        if method == "auto":
+            clip_ok = getattr(self.input, "clipboard_available", None)
+            if callable(clip_ok):
+                try:
+                    available = bool(clip_ok())
+                except Exception:  # pragma: no cover - backend bez metody
+                    available = True
+                if not available:
+                    self.events.emit(EngineEvent(
+                        EventKind.LOG, block_id=block.id,
+                        message=t("engine.clipboard_unavailable")))
         self.events.emit(EngineEvent(
             EventKind.ACTION, block_id=block.id,
             message=t("engine.type_text", method=method, text=text[:40])))

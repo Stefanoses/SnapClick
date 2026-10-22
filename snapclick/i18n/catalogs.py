@@ -121,6 +121,8 @@ PL: Dict[str, str] = {
     "engine.skip_click": "Element '{template}' nie znaleziony — pomijam klik.",
     "engine.click": "klik {button}{dbl} w {point} (score={score:.2f})",
     "engine.type_text": "wpisz ({method}): {text!r}",
+    "engine.clipboard_unavailable": "Schowek niedostępny (brak xclip/xsel) — "
+                                    "wpisuję klawiszami (XTEST).",
     "engine.iteration": "iteracja {n}",
     "engine.while_limit": "Limit {n} iteracji osiągnięty — bezpiecznik pętli WHILE.",
     "engine.not_found": "Brak elementu '{template}' "
@@ -223,6 +225,7 @@ PL: Dict[str, str] = {
     "set.move_settle": "Osadzenie kursora przed kliknięciem",
     "set.double_gap": "Odstęp w dwukliku",
     "set.release_settle": "Po puszczeniu przycisku",
+    "set.key_hold": "Przytrzymanie klawisza",
     "set.focus_enabled": "Aktywuj okno gry przed startem scenariusza",
     "set.focus_after_click": "Aktywuj okno przed każdym kliknięciem (wolniejsze)",
     "set.focus_delay": "Czekaj po aktywacji okna",
@@ -414,6 +417,8 @@ EN: Dict[str, str] = {
     "engine.skip_click": "Element '{template}' not found — skipping click.",
     "engine.click": "click {button}{dbl} at {point} (score={score:.2f})",
     "engine.type_text": "type ({method}): {text!r}",
+    "engine.clipboard_unavailable": "Clipboard unavailable (no xclip/xsel) — "
+                                    "typing via keys (XTEST).",
     "engine.iteration": "iteration {n}",
     "engine.while_limit": "WHILE loop safety limit of {n} iterations reached.",
     "engine.not_found": "Element '{template}' not found "
@@ -509,6 +514,7 @@ EN: Dict[str, str] = {
     "set.move_settle": "Cursor settle before click",
     "set.double_gap": "Double-click gap",
     "set.release_settle": "After button release",
+    "set.key_hold": "Key hold",
     "set.focus_enabled": "Activate game window before scenario starts",
     "set.focus_after_click": "Activate window before every click (slower)",
     "set.focus_delay": "Wait after window activation",
