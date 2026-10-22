@@ -82,13 +82,12 @@ def main() -> int:
     try:
         focus = d.get_input_focus()
         raw = focus.focus
-        # python-xlib zwraca albo obiekt Window, albo surowy int
+        # python-xlib zwraca albo obiekt Window, albo surowy int;
+        # Xlib.X NIE definiuje stalech PointerRoot/None — to wartosci z
+        # protokolu X (X.h): PointerRoot=1, InputFocusNone=0
         fid = int(getattr(raw, "id", raw))
-        title = None
-        if fid in (X.InputFocusPointerRoot, X.InputFocusNone,
-                   getattr(X, "InputFocusFollowsPointer", 0)):
-            title = {X.InputFocusPointerRoot: "PointerRoot (serwer, nie okno!)",
-                     X.InputFocusNone: "None (klawisze trafia w proznie!)"}.get(fid)
+        title = {1: "PointerRoot (serwer, nie okno!)",
+                 0: "None (klawisze trafia w proznie!)"}.get(fid)
         if title is None and fid:
             title = window_title(d.create_resource_object("window", fid))
         print(f"  id=0x{fid:x}  tytul={title!r}")
@@ -107,8 +106,7 @@ def main() -> int:
             raw = d.get_input_focus().focus
             fid = int(getattr(raw, "id", raw))
             t = (window_title(d.create_resource_object("window", fid))
-                 if fid not in (X.InputFocusPointerRoot, X.InputFocusNone)
-                 else f"<specjalny 0x{fid:x}>")
+                 if fid not in (0, 1) else f"<specjalny 0x{fid:x}>")
             print(f"  fokus po aktywacji: 0x{fid:x} {t!r}")
         except Exception as exc:
             print(f"  blad: {exc!r}")
@@ -136,7 +134,7 @@ def main() -> int:
                                      _X.InputOutput, _X.CopyFromParent,
                                      event_mask=(_X.KeyPressMask
                                                  | _X.KeyReleaseMask))
-            win.map_window()
+            win.map()
             d.flush()
             win.set_input_focus(_X.RevertToParent, _X.CurrentTime)
             d.flush()

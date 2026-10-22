@@ -365,7 +365,12 @@ class X11WindowBackend(_X11Common):
             if needle in win.title.lower():
                 xwin = d.create_resource_object("window", win.window_id)
                 try:
-                    xwin.map_window()   # no-op gdy juz widoczne
+                    # Xlib.Window NIE ma map_window() — metoda to map().
+                    # Dawniej AttributeError byl polykany przez ponizszy except
+                    # i activate() ZAWSZE zwralo False: okno gry nigdy nie
+                    # dostawalo focusu, a klawisze XTEST trafilysc do zlego
+                    # okna (cisze 'nie dzialajace' wpisywanie tekstu).
+                    xwin.map()   # no-op gdy juz widoczne
                     client_list_atom = d.intern_atom("_NET_ACTIVE_WINDOW")
                     data = [2, 0, X.CurrentTime]  # source: user
                     # Display NIE ma atrybutu .event — komunikaty tworzy
