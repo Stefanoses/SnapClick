@@ -290,11 +290,14 @@ class X11InputBackend(_X11Common):
         combo = self._native_combo(d, keysyms, keymap)
         if combo is not None:
             code, mods = combo
+            # Modyfikatory TRZYMAM wcisniete przez caly znak: _send_keycode
+            # (press+release) puscilby Shift/AltGr PRZED klawiszem znaku, wiec
+            # 'Z' daloby 'z', a 'ó' daloby 'o' (regresja znaleziona na Decku).
             for m in mods:
-                self._send_keycode(d.keysym_to_keycode(m))
+                self._press_keycode(d.keysym_to_keycode(m))
             self._send_keycode(code)
             for m in reversed(mods):
-                self._send_keycode(d.keysym_to_keycode(m))
+                self._release_keycode(d.keysym_to_keycode(m))
             return
         self._send_char_via_remap(d, keysyms[0])
 
@@ -341,6 +344,18 @@ class X11InputBackend(_X11Common):
             time.sleep(0.01)
         d.sync()
 
+    def _press_keycode(self, code: int) -> None:
+        from Xlib import X
+        from Xlib.ext import xtest
+        xtest.fake_input(self.display, X.KeyPress, code)
+        self.display.sync()
+
+    def _release_keycode(self, code: int) -> None:
+        from Xlib import X
+        from Xlib.ext import xtest
+        xtest.fake_input(self.display, X.KeyRelease, code)
+        self.display.sync()
+
     def _send_keycode(self, code: int) -> None:
         """KeyPress -> hold -> KeyRelease.
 
@@ -348,16 +363,11 @@ class X11InputBackend(_X11Common):
         (XQueryKeymap, polling DirectInput) moga nie zobaczyc wogole
         wciśnietego klawisza — stad key_hold_s (jak xdotool --delay).
         """
-        from Xlib import X
-        from Xlib.ext import xtest
-        d = self.display
-        xtest.fake_input(d, X.KeyPress, code)
-        d.sync()
+        self._press_keycode(code)
         hold = get_settings().key_hold_s
         if hold > 0:
             time.sleep(hold)
-        xtest.fake_input(d, X.KeyRelease, code)
-        d.sync()
+        self._release_keycode(code)
 
     def _free_keycode(self, d) -> int:
         """Keycode nieuzywany przez zadny keysym ani modyfikator."""

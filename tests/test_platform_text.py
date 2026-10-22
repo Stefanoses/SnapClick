@@ -131,6 +131,10 @@ def x11_backend():
     def spy(code):
         backend.events.append(("keycode", code))
     backend._send_keycode = spy
+    # modyfikatory ida osobnymi prymitywami (sa TRZYMANE przez caly znak)
+    backend._press_keycode = lambda code: backend.events.append(("press", code))
+    backend._release_keycode = lambda code: backend.events.append(
+        ("release", code))
     yield backend, orig_keycode
 
 
@@ -205,8 +209,9 @@ def test_x11_uppercase_uses_shift_not_remap(x11_backend):
 
     backend._send_char("Z")
     assert backend._display.changed == [], "Z nie moze byc remapowane"
-    assert backend.events == [("keycode", 50), ("keycode", 0x1E),
-                              ("keycode", 50)]     # Shift press/release
+    # Shift TRZYMANY przez caly znak: press Shift -> Z -> release Shift
+    assert backend.events == [("press", 50), ("keycode", 0x1E),
+                              ("release", 50)]
 
 
 def test_x11_group2_char_uses_altgr_not_remap(x11_backend):
@@ -226,8 +231,8 @@ def test_x11_group2_char_uses_altgr_not_remap(x11_backend):
 
     backend._send_char("ó")
     assert backend._display.changed == [], "ó nie moze byc remapowane"
-    assert backend.events == [("keycode", 92), ("keycode", 0x20),
-                              ("keycode", 92)]     # AltGr press/release
+    assert backend.events == [("press", 92), ("keycode", 0x20),
+                              ("release", 92)]     # AltGr trzymany przez znak
 
 
 def test_x11_legacy_keysym_candidates():
