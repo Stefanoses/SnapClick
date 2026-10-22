@@ -9,6 +9,7 @@ ukladzie klawiatury byly pomijane przez 'continue'. Teraz:
 from __future__ import annotations
 
 import sys
+import types
 
 import pytest
 
@@ -80,6 +81,10 @@ class FakeDisplay:
                        0x27: 0x7B}            # '[' (Enter/level2 '{')
         self.changed = []
         self.syncs = 0
+        # prawdziwy Xlib: Display NIE ma keyboard_mapping_range() — zakres
+        # keycode'ow siedzi w display.info (atrybut protokolowy)
+        self.display = types.SimpleNamespace(
+            info=types.SimpleNamespace(min_keycode=8, max_keycode=135))
 
     def keysym_to_keycode(self, keysym):
         return self.sym2code.get(keysym, 0)
@@ -87,9 +92,6 @@ class FakeDisplay:
     def get_keyboard_mapping(self, code, count):
         first = self.level1.get(code, 0)
         return [[first, 0, 0, 0]]              # 1 keysym na 4 levelow
-
-    def keyboard_mapping_range(self):
-        return (8, 135)
 
     def get_modifier_mapping(self):
         return [(50, 62, 0, 0, 0, 0, 0, 0)] * 8
@@ -197,12 +199,101 @@ def test_x11_remap_restores_mapping_on_error(x11_backend):
 
 
 def test_x11_free_keycode_skips_reserved(x11_backend):
+    """Regresja: prawdziwy Xlib.Display NIE ma keyboard_mapping_range()
+    (AttributeError('keyboard_mapping_range') wywralo pierwsze wpisywanie
+    tekstu na X11) — zakres czytamy z display.info."""
     from snapclick.core.platform.x11 import X11InputBackend
     backend, _ = x11_backend
     d = backend._display
+    assert not hasattr(d, "keyboard_mapping_range")   # jak w prawdziwym Xlib
     code = X11InputBackend._free_keycode(backend, d)
     assert code not in {kc for mod in d.get_modifier_mapping() for kc in mod}
     assert d.level1.get(code, 0) == 0          # naprawde wolny
+    assert 8 <= code <= 135
+
+
+def test_x11_press_combo_single_char_without_keysym_to_keysym(x11_backend,
+                                                              monkeypatch):
+    """Regresja: Display NIE ma keysym_to_keysym() — press_combo liczy keysym
+    znaku wlasnym przelicznikiem (_keysym_of)."""
+    # Xlib nie musi byc zainstalowany (Windows/CI) — press_combo importuje
+    # XTEST wewnatrz funkcji
+    xtest = types.ModuleType("Xlib.ext.xtest")
+    xtest.fake_input = lambda d, t, detail=0, x=0, y=0: None
+    ext = types.ModuleType("Xlib.ext")
+    ext.xtest = xtest
+    xlib = types.ModuleType("Xlib")
+    monkeypatch.setitem(sys.modules, "Xlib", xlib)
+    monkeypatch.setitem(sys.modules, "Xlib.ext", ext)
+    monkeypatch.setitem(sys.modules, "Xlib.ext.xtest", xtest)
+
+    backend, _ = x11_backend
+    backend._display.sym2code[0x62] = 0x30     # 'b' -> keycode
+    sent = []
+    backend._send_keysym = sent.append         # bez XTEST (Windows/CI)
+    backend.press_combo("b")
+    assert sent == [0x62]
+
+
+def test_x11_list_windows_translates_origin(monkeypatch):
+    """Regresja: Window.translate_coords wymaga (dst, src_x, src_y) —
+    wczesniej list_windows wywolywalo translate_coords(root) i kazde
+    listowanie okien konczylo sie TypeError (stad 'Window listing error'
+    w logu i szukanie bez regionu okna)."""
+    xlib = types.ModuleType("Xlib")
+    xlib.X = types.SimpleNamespace()
+    monkeypatch.setitem(sys.modules, "Xlib", xlib)
+
+    import snapclick.core.platform.x11 as x11
+
+    class FakeGeom:
+        width, height = 800, 600
+
+    class FakeTrans:
+        x, y = 100, 50
+
+    class FakeWin:
+        def get_full_property(self, atom, typ):
+            if atom == "_NET_WM_NAME":
+                return types.SimpleNamespace(value=b"MyApp")
+            return None                        # brak stanu/ramki
+
+        def get_wm_name(self):
+            return None
+
+        def get_geometry(self):
+            return FakeGeom()
+
+        def translate_coords(self, dst, src_x, src_y):
+            assert (src_x, src_y) == (0, 0), "zla sygnature translate_coords"
+            return FakeTrans()
+
+    class FakeRoot:
+        def get_full_property(self, atom, typ):
+            if atom == "_NET_CLIENT_LIST":
+                return types.SimpleNamespace(value=[42])
+            return None
+
+    class FakeScreenObj:
+        root = FakeRoot()
+
+    class FakeD:
+        def screen(self):
+            return FakeScreenObj()
+
+        def intern_atom(self, name):
+            return name
+
+        def create_resource_object(self, kind, wid):
+            assert kind == "window" and wid == 42
+            return FakeWin()
+
+    backend = x11.X11WindowBackend.__new__(x11.X11WindowBackend)
+    backend._display = FakeD()
+    wins = backend.list_windows()
+    assert len(wins) == 1
+    assert wins[0].title == "MyApp"
+    assert wins[0].region == (100, 50, 800, 600)
 
 
 def test_x11_type_text_keeps_every_polish_char(x11_backend):

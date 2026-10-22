@@ -28,6 +28,19 @@ def _xlib():
     return display
 
 
+def _keycode_range(d):
+    """Zakres keycode'ow serwera X.
+
+    Uwaga: Xlib.display.Display NIE ma metody keyboard_mapping_range() —
+    wartosci z protokolu X leza w display.info (regresja:
+    AttributeError('keyboard_mapping_range') przy wpisywaniu tekstu).
+    """
+    info = getattr(getattr(d, "display", None), "info", None)
+    lo = int(getattr(info, "min_keycode", 0) or 8)
+    hi = int(getattr(info, "max_keycode", 0) or 255)
+    return lo, hi
+
+
 class _X11Common:
     """Wspólne połączenie z serwerem X (jedno na backend, wątek roboczy)."""
 
@@ -135,8 +148,10 @@ class X11InputBackend(_X11Common):
         main_key = {"enter": 0xFF0D, "esc": 0xFF1B, "space": 0xFF20,
                     "tab": 0xFF09, "backspace": 0xFF08, "delete": 0xFFFF,
                     "del": 0xFFFF}.get(main)
-        if main_key is None:
-            main_key = d.keysym_to_keysym(ord(main)) if len(main) == 1 else None
+        if main_key is None and len(main) == 1:
+            # Display NIE ma keysym_to_keysym(); keysym znaku liczony jak
+            # w _keysym_of (Latin-1 1:1, reszta z prefiksem Unicode)
+            main_key = self._keysym_of(main)
         if main_key is None or d.keysym_to_keycode(main_key) == 0:
             # zwolnij trzymane modyfikatory przed rzuceniem błędu
             for ks in mods:
@@ -213,7 +228,7 @@ class X11InputBackend(_X11Common):
 
     def _free_keycode(self, d) -> int:
         """Keycode nieuzywany przez zadny keysym ani modyfikator."""
-        lo, hi = d.keyboard_mapping_range()
+        lo, hi = _keycode_range(d)
         reserved = {kc for mod in d.get_modifier_mapping() for kc in mod}
         for code in range(hi, max(lo, 8) - 1, -1):   # od gory — rzadziej uzywane
             if code in reserved:
@@ -260,6 +275,7 @@ class X11WindowBackend(_X11Common):
         from Xlib import X  # noqa: F401
         d = self.display
         root = d.screen().root
+        # (translate_coords ponizej wymaga sygnatury (dst_window, x, y))
 
         def prop(win, name, atom="ATOM"):
             a = d.intern_atom(name)
@@ -293,7 +309,9 @@ class X11WindowBackend(_X11Common):
                 continue
 
             geom = win.get_geometry()
-            tx_ty = win.translate_coords(root)
+            # prawdziwa sygnatura Xlib: translate_coords(dst, src_x, src_y) —
+            # punkt (0,0) okna przelozony na wspolrzedne roota
+            tx_ty = win.translate_coords(root, 0, 0)
             # ramka dekoracji okna (tytuł/pas) jeśli WM ją udostępnia
             ext = prop(win, "_NET_FRAME_EXTENTS")
             left = right = top = bottom = 0
@@ -327,7 +345,8 @@ class X11WindowBackend(_X11Common):
         dla pelnoekranowej gry dodajemy bezposrednie przejecie focusu
         wejsciowego (set_input_focus) i mapowanie okna ukrytego.
         """
-        from Xlib import X  # noqa: F401
+        from Xlib import X
+        from Xlib.protocol import event
         d = self.display
         root = d.screen().root
         needle = title_substr.lower()
@@ -338,7 +357,9 @@ class X11WindowBackend(_X11Common):
                     xwin.map_window()   # no-op gdy juz widoczne
                     client_list_atom = d.intern_atom("_NET_ACTIVE_WINDOW")
                     data = [2, 0, X.CurrentTime]  # source: user
-                    ev = d.event.ClientMessage(
+                    # Display NIE ma atrybutu .event — komunikaty tworzy
+                    # Xlib.protocol.event
+                    ev = event.ClientMessage(
                         window=xwin, client_type=client_list_atom, data=(32, data)
                     )
                     root.send_event(
