@@ -129,9 +129,13 @@ def main() -> int:
             from Xlib import X as _X
             from Xlib.ext import xtest as _xt
             root = d.screen().root
+            # override_redirect: okno omija menedzera okien — bez tego KWin
+            # potrafi odeslac blad protokolu, na ktorym python-xlib sie wywala
+            # (BadRRModeError bez sequence_number)
             win = root.create_window(10, 10, 200, 120, 0,
                                      d.screen().root_depth,
                                      _X.InputOutput, _X.CopyFromParent,
+                                     override_redirect=1,
                                      event_mask=(_X.KeyPressMask
                                                  | _X.KeyReleaseMask))
             win.map()
