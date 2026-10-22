@@ -213,6 +213,7 @@ PL: Dict[str, str] = {
     "dlg.settings_method": "Metoda klikania",
     "choice.method_sendinput": "SendInput (DirectInput/OpenGL)",
     "choice.method_postmessage": "PostMessage (do HWND okna — omija antybot)",
+    "choice.method_clipboard": "Schowek + Ctrl+V (pewne dla gier pod Wine/Proton)",
     "set.click_method": "Wysyłanie kliknięć",
     "set.type_method": "Wysyłanie tekstu",
     "set.click_method_hint": "Kliknięcia i tekst sterowane są osobno. "
@@ -226,6 +227,7 @@ PL: Dict[str, str] = {
     "set.double_gap": "Odstęp w dwukliku",
     "set.release_settle": "Po puszczeniu przycisku",
     "set.key_hold": "Przytrzymanie klawisza",
+    "set.mod_settle": "Odstęp przy modyfikatorach (AltGr/Shift)",
     "set.focus_enabled": "Aktywuj okno gry przed startem scenariusza",
     "set.focus_after_click": "Aktywuj okno przed każdym kliknięciem (wolniejsze)",
     "set.focus_delay": "Czekaj po aktywacji okna",
@@ -502,6 +504,7 @@ EN: Dict[str, str] = {
     "dlg.settings_method": "Click method",
     "choice.method_sendinput": "SendInput (DirectInput/OpenGL)",
     "choice.method_postmessage": "PostMessage (to window HWND — bypasses antybot)",
+    "choice.method_clipboard": "Clipboard + Ctrl+V (reliable for Wine/Proton games)",
     "set.click_method": "Click delivery",
     "set.type_method": "Text delivery",
     "set.click_method_hint": "Clicks and text are controlled separately. "
@@ -515,6 +518,7 @@ EN: Dict[str, str] = {
     "set.double_gap": "Double-click gap",
     "set.release_settle": "After button release",
     "set.key_hold": "Key hold",
+    "set.mod_settle": "Modifier settle time (AltGr/Shift)",
     "set.focus_enabled": "Activate game window before scenario starts",
     "set.focus_after_click": "Activate window before every click (slower)",
     "set.focus_delay": "Wait after window activation",

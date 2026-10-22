@@ -27,6 +27,12 @@ Sens parametrow (dlaczego niektore gry ignoruja klik):
   * ``key_hold_s``        — czas miedzy KeyPress a KeyRelease. Impuls 0 ms
                             bywa gubiony przez aplikacje odpytujace stan
                             klawiatury (XQueryKeymap / DirectInput polling).
+  * ``mod_settle_s``      — pauza po wcisnieciu i po puszczeniu modyfikatora
+                            (AltGr/Shift). Bez niej X serwer i Wine moga
+                            przetlumaczyc klawisz ZANIM stan grupy XKB zostanie
+                            utrwalony — w grach DirectInput daje to 's' zamiast
+                            'ś' albo przesaczony AltGr na nastepny znak ('Zsoj'
+                            zamiast 'Zwój').
 """
 from __future__ import annotations
 
@@ -50,6 +56,7 @@ class InputSettings:
     double_gap_s: float = 0.05
     release_settle_s: float = 0.02
     key_hold_s: float = 0.012
+    mod_settle_s: float = 0.02
     focus_enabled: bool = True
     focus_after_click: bool = False
     focus_delay_s: float = 0.15
@@ -58,7 +65,8 @@ class InputSettings:
         """Przycinanie do zdrowych zakresow (plik JSON moze byc reczny)."""
         if self.click_method not in ("sendinput", "postmessage"):
             self.click_method = "sendinput"
-        if self.type_method not in ("auto", "sendinput", "postmessage"):
+        if self.type_method not in ("auto", "sendinput", "postmessage",
+                                    "clipboard"):
             self.type_method = "auto"
         limits = {
             "mouse_hold_s": (0.0, 2.0),
@@ -66,6 +74,7 @@ class InputSettings:
             "double_gap_s": (0.01, 1.0),
             "release_settle_s": (0.0, 2.0),
             "key_hold_s": (0.0, 2.0),
+            "mod_settle_s": (0.0, 2.0),
             "focus_delay_s": (0.0, 5.0),
         }
         for f in fields(self):

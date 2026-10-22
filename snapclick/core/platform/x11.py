@@ -15,6 +15,10 @@ from typing import List, Optional
 from ..settings import get_settings
 from .base import BackendError, Region, WindowInfo
 
+# Selekcja CLIPBOARD (schowek) — atomy i czas trzymania wlascicielstwa
+_CLIP_ATOMS = ("CLIPBOARD", "TARGETS", "UTF8_STRING", "STRING", "TEXT", "ATOM")
+_CLIPBOARD_TIMEOUT_S = 3.0
+
 
 def _xlib():
     try:
@@ -293,11 +297,16 @@ class X11InputBackend(_X11Common):
             # Modyfikatory TRZYMAM wcisniete przez caly znak: _send_keycode
             # (press+release) puscilby Shift/AltGr PRZED klawiszem znaku, wiec
             # 'Z' daloby 'z', a 'ó' daloby 'o' (regresja znaleziona na Decku).
+            settle = get_settings().mod_settle_s
             for m in mods:
                 self._press_keycode(d.keysym_to_keycode(m))
+                if settle > 0:
+                    time.sleep(settle)     # XKB musi utrwalic grupe przed znakiem
             self._send_keycode(code)
             for m in reversed(mods):
                 self._release_keycode(d.keysym_to_keycode(m))
+                if settle > 0:
+                    time.sleep(settle)     # AltGr nie moze przesaczyc na nastepny znak
             return
         self._send_char_via_remap(d, keysyms[0])
 
@@ -315,10 +324,20 @@ class X11InputBackend(_X11Common):
                 self.press_combo("ctrl+v")
                 return
             if method == "clipboard":
-                raise BackendError(
-                    "Brak narzędzia xclip/xsel — schowek niedostępny. "
-                    "Zainstaluj xclip lub użyj method='type'."
-                )
+                owner = self._own_clipboard(text)
+                if owner is None:
+                    raise BackendError(
+                        "Brak narzędzia xclip/xsel i nie udalo sie przejac "
+                        "selekcji CLIPBOARD — użyj method='type'."
+                    )
+                # Wine pobiera selekcje DOPIERO po Ctrl+V, wiec petla
+                # zdarzen musi kracic wokol wklejenia.
+                try:
+                    self.press_combo("ctrl+v")
+                    owner.pump(_CLIPBOARD_TIMEOUT_S)
+                finally:
+                    owner.close()
+                return
         if method in ("type", "auto") and self._xdotool is not None:
             # xdotool type to zloty standard: sam rozwiazuje uklady z grupami
             # (AltGr), odswieza tablice mapowania i --clearmodifiers odpuszcza
@@ -396,10 +415,11 @@ class X11InputBackend(_X11Common):
 
     # ----------------------------------------------------------- clipboard
     def clipboard_available(self) -> bool:
-        """Czy sciezka clipboard (xclip/xsel) jest w ogole dostepna."""
-        return self._clip_tool is not None
+        """Schowek na X11 dziala zawsze: xclip/xsel albo wlasna selekcja."""
+        return True
 
     def set_clipboard(self, text: str) -> None:
+        """Ustawia schowek przez xclip/xsel (jezeli sa) — patrz _own_clipboard."""
         if self._clip_tool is None:
             raise BackendError(
                 "Schowek na X11 wymaga zainstalowanego xclip albo xsel."
@@ -409,6 +429,100 @@ class X11InputBackend(_X11Common):
         else:
             cmd = ["xsel", "--clipboard", "--input"]
         subprocess.run(cmd, input=text.encode("utf-8"), check=True)
+
+    def _own_clipboard(self, text: str):
+        """Przejmuje selekcje CLIPBOARD (czysty python-xlib) lub zwraca None."""
+        try:
+            return _ClipboardOwner(text)
+        except Exception:      # serwer bez wolnych okien / brak Xlib
+            return None
+
+
+class _ClipboardOwner:
+    """Wlasciciel selekcji CLIPBOARD w czystym python-xlib.
+
+    SteamOS na Decku NIE ma xclip/xsel, a wklejenie ze schowka to jedyna
+    metoda, ktora calkowicie omija tlumaczenie klawiatury w Wine — gry
+    DirectInput gubia przy tym znaki AltGr (polskie litery). Odpowiadamy na
+    TARGETS/UTF8_STRING/STRING; UTF8_STRING jest wystawiony jako pierwszy,
+    wiec Wine (CF_UNICODETEXT) dostaje pelny Unicode zamiast '?' z kodpage
+    procesu (LANG=C).
+    """
+
+    def __init__(self, text: str) -> None:
+        from Xlib import X, display as _display
+        from Xlib.protocol import event
+        self._X = X
+        self._event = event
+        self._text = text
+        self.served = 0
+        self.d = _display.Display()
+        self.atoms = {name: self.d.intern_atom(name) for name in _CLIP_ATOMS}
+        root = self.d.screen().root
+        self.win = root.create_window(0, 0, 1, 1, 0, X.CopyFromParent,
+                                      X.InputOnly, X.CopyFromParent)
+        self.win.change_attributes(event_mask=X.SelectionRequestMask
+                                   | X.SelectionClearMask)
+        self.win.set_selection_owner(self.atoms["CLIPBOARD"], X.CurrentTime)
+        self.d.flush()
+        if int(self.d.get_selection_owner(self.atoms["CLIPBOARD"])) != \
+                int(self.win.id):
+            self.close()
+            raise BackendError("Nie udalo sie przejac selekcji CLIPBOARD.")
+
+    def pump(self, timeout: float) -> int:
+        """Obsluguje zapytania selekcji az do pobrania tekstu lub timeoutu."""
+        X = self._X
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            while self.d.pending_events():
+                ev = self.d.next_event()
+                if ev.type == X.SelectionRequest:
+                    self._reply(ev)
+                elif ev.type == X.SelectionClear:
+                    return self.served
+            if self.served:
+                time.sleep(0.05)      # daj czas na kolejne zapytania (TARGETS)
+                if not self.d.pending_events():
+                    return self.served
+            time.sleep(0.005)
+        return self.served
+
+    def _reply(self, ev) -> None:
+        target = int(ev.target)
+        prop = int(ev.property) or target
+        fmt, data = 8, None
+        if target == self.atoms["TARGETS"]:
+            fmt = 32
+            data = [self.atoms[t] for t in
+                    ("TARGETS", "UTF8_STRING", "STRING", "TEXT")]
+        elif target == self.atoms["UTF8_STRING"]:
+            data = self._text.encode("utf-8")
+        elif target in (self.atoms["STRING"], self.atoms["TEXT"]):
+            data = self._text.encode("latin-1", "replace")
+        requestor = self.d.create_resource_object("window", int(ev.requestor))
+        if data is not None:
+            requestor.change_property(prop, target, fmt, data)
+            self.served += 1
+        self._event.SelectionNotify(
+            time=ev.time, requestor=int(ev.requestor),
+            selection=ev.selection, target=ev.target,
+            property=prop if data is not None else 0,
+        ).send(int(ev.requestor), 0)
+        self.d.flush()
+
+    def close(self) -> None:
+        try:
+            self.win.set_selection_owner(self.atoms["CLIPBOARD"], 0)
+            self.d.flush()
+            self.win.destroy()
+            self.d.flush()
+        except Exception:  # pragma: no cover
+            pass
+        try:
+            self.d.close()
+        except Exception:  # pragma: no cover
+            pass
 
 
 class X11WindowBackend(_X11Common):

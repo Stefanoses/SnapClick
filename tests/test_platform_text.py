@@ -246,6 +246,79 @@ def test_x11_legacy_keysym_candidates():
     assert B._char_keysyms("a") == [0x61]
 
 
+def test_x11_modifier_settle_gaps(x11_backend, monkeypatch):
+    """Regresja (Metin2/Wine): 'Zsoj' zamiast 'Zwoj' — AltGr puszczony w tym
+    samym momencie co znak przesaczal na nastepny klawisz. Miedzy press i
+    release modyfikatora musza byc odstepy mod_settle_s."""
+    from snapclick.core import settings as S
+    from snapclick.core.settings import InputSettings, set_settings
+
+    prev = S._current
+    set_settings(InputSettings(mod_settle_s=0.05), persist=False)
+    try:
+        backend, _ = x11_backend
+        d = backend._display
+        orig = d.get_keyboard_mapping
+
+        def mapping(code, count):
+            rows = orig(code, count)
+            if code <= 0x1E < code + count:
+                rows[0x1E - code][1] = 0x5A          # kolumna Shift = 'Z'
+            return rows
+        d.get_keyboard_mapping = mapping
+
+        sleeps = []
+        monkeypatch.setattr("snapclick.core.platform.x11.time.sleep",
+                            lambda s: sleeps.append(s))
+        backend._send_char("Z")
+        assert backend.events == [("press", 50), ("keycode", 0x1E),
+                                  ("release", 50)]
+        assert sleeps.count(0.05) == 2               # po press i po release
+    finally:
+        S._current = prev
+
+
+def test_x11_clipboard_fallback_without_xclip(x11_backend, monkeypatch):
+    """Deck/SteamOS nie ma xclip/xsel — schowek python-xlib + Ctrl+V to
+    jedyna metoda omijajaca tlumaczenie klawiatury w Wine."""
+    import snapclick.core.platform.x11 as x11
+
+    backend, _ = x11_backend
+    backend._clip_tool = None
+    backend._xdotool = None
+    combos = []
+    backend.press_combo = combos.append
+
+    pumped = []
+
+    class FakeOwner:
+        def pump(self, timeout):
+            pumped.append(timeout)
+
+        def close(self):
+            pumped.append("close")
+
+    monkeypatch.setattr(x11, "_ClipboardOwner", lambda text: FakeOwner())
+    backend.type_text("Zwój błogosławieństwa", method="clipboard")
+    assert combos == ["ctrl+v"]
+    assert pumped == [x11._CLIPBOARD_TIMEOUT_S, "close"]
+
+
+def test_x11_clipboard_error_when_selection_denied(x11_backend, monkeypatch):
+    """Bez xclip i bez przejecia selekcji — czytelny blad, nie ciche milczenie."""
+    from snapclick.core.platform.base import BackendError
+    import snapclick.core.platform.x11 as x11
+
+    backend, _ = x11_backend
+    backend._clip_tool = None
+
+    def boom(text):
+        raise RuntimeError("no window")
+    monkeypatch.setattr(x11, "_ClipboardOwner", boom)
+    with pytest.raises(BackendError):
+        backend.type_text("x", method="clipboard")
+
+
 def test_x11_type_text_prefers_xdotool(x11_backend, monkeypatch):
     """xdotool to zloty standard — jezeli jest, 'type' idzie nim (pelne
     wsparcie ukladow grupowych, widoczne rowniez dla Wine)."""
