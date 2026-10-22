@@ -20,6 +20,12 @@ _CLIP_ATOMS = ("CLIPBOARD", "TARGETS", "UTF8_STRING", "STRING", "TEXT", "ATOM")
 _CLIPBOARD_TIMEOUT_S = 3.0
 
 
+def _wid(x) -> int:
+    """XID z int LUB obiektu zasobu Xlib (Window/Atom — zdarzenia zwracaja
+    obiekty, nie surowe liczby)."""
+    return int(getattr(x, "id", x) or 0)
+
+
 def _xlib():
     try:
         from Xlib import X, display, error  # noqa: F401
@@ -466,7 +472,7 @@ class _ClipboardOwner:
                                       X.InputOnly, X.CopyFromParent)
         self.win.set_selection_owner(self.atoms["CLIPBOARD"], X.CurrentTime)
         self.d.flush()
-        if int(self.d.get_selection_owner(self.atoms["CLIPBOARD"])) != \
+        if _wid(self.d.get_selection_owner(self.atoms["CLIPBOARD"])) != \
                 int(self.win.id):
             self.close()
             raise BackendError("Nie udalo sie przejac selekcji CLIPBOARD.")
@@ -490,26 +496,26 @@ class _ClipboardOwner:
         return self.served
 
     def _reply(self, ev) -> None:
-        target = int(ev.target)
-        prop = int(ev.property) or target
+        target = _wid(ev.target)
+        prop = _wid(ev.property) or target
         fmt, data = 8, None
         if target == self.atoms["TARGETS"]:
             fmt = 32
-            data = [self.atoms[t] for t in
+            data = [_wid(self.atoms[t]) for t in
                     ("TARGETS", "UTF8_STRING", "STRING", "TEXT")]
         elif target == self.atoms["UTF8_STRING"]:
             data = self._text.encode("utf-8")
         elif target in (self.atoms["STRING"], self.atoms["TEXT"]):
             data = self._text.encode("latin-1", "replace")
-        requestor = self.d.create_resource_object("window", int(ev.requestor))
+        requestor = self.d.create_resource_object("window", _wid(ev.requestor))
         if data is not None:
             requestor.change_property(prop, target, fmt, data)
             self.served += 1
         self._event.SelectionNotify(
-            time=ev.time, requestor=int(ev.requestor),
-            selection=ev.selection, target=ev.target,
+            time=ev.time, requestor=_wid(ev.requestor),
+            selection=_wid(ev.selection), target=target,
             property=prop if data is not None else 0,
-        ).send(int(ev.requestor), 0)
+        ).send(_wid(ev.requestor), 0)
         self.d.flush()
 
     def close(self) -> None:
