@@ -4,4 +4,4 @@ Bump this file, then run ``python scripts/release.py`` to build the
 standalone bundles and tag the release.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
