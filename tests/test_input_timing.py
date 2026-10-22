@@ -177,6 +177,9 @@ def x11_click_backend(monkeypatch):
     ext = types.ModuleType("Xlib.ext")
     ext.xtest = xtest
     xlib = types.ModuleType("Xlib")
+    # kody zdarzen X11 (Xlib.X) — te same wartosci co w prawdziwym Xlib
+    xlib.X = types.SimpleNamespace(KeyPress=2, KeyRelease=3, ButtonPress=4,
+                                   ButtonRelease=5, MotionNotify=6)
     monkeypatch.setitem(sys.modules, "Xlib", xlib)
     monkeypatch.setitem(sys.modules, "Xlib.ext", ext)
     monkeypatch.setitem(sys.modules, "Xlib.ext.xtest", xtest)
@@ -193,6 +196,9 @@ def x11_click_backend(monkeypatch):
 def test_x11_click_press_release_have_hold(x11_click_backend, fast_settings):
     backend, calls = x11_click_backend
     backend.click(300, 200, button="left")
+    # ruch = MotionNotify(6), przyciski = ButtonPress(4)/ButtonRelease(5)
+    kinds = [c[0] for c in calls if not isinstance(c[0], str)]
+    assert kinds == [6, 4, 5]
 
     # BUTTON_PRESS (4) i BUTTON_RELEASE (5) z przytrzymaniem pomiedzy
     ev = [c for c in calls if not isinstance(c[0], str)]
@@ -210,7 +216,9 @@ def test_x11_key_press_release_have_hold(x11_click_backend, fast_settings):
     backend, calls = x11_click_backend
     backend._send_keycode(30)
     kinds = [c[0] for c in calls]
-    assert kinds == [4, "sleep", 5]            # press -> hold -> release
+    # KLUCZOWA regresja: klawiatura to KeyPress(2)/KeyRelease(3) — dawne
+    # stale 4/5 to przyciski MYSZY (XTEST bierze kody zdarzen X11)
+    assert kinds == [2, "sleep", 3]            # press -> hold -> release
     assert calls[1][1] == pytest.approx(0.012)  # domyslny key_hold_s
 
 

@@ -80,10 +80,17 @@ class X11InputBackend(_X11Common):
         return None
 
     # -------------------------------------------------------------- mouse
+    # Uwaga na stala XTEST: reqType fake_input() NIE jest kodem SendInput —
+    # to kod GLOWNEGO typu zdarzenia X: KeyPress=2, KeyRelease=3,
+    # ButtonPress=4, ButtonRelease=5, MotionNotify=6. Uzycie 4/5 dla
+    # klawiatury wysylalo w istocie przyciski myszy z 'keycode'em jako
+    # numerem przycisku (niewazny -> blad serwera, cisze 'niepiszaca'
+    # klawiatura przy dzialajacej myszy — regresja znaleziona na Decku).
     def move(self, x: int, y: int) -> None:
+        from Xlib import X
         from Xlib.ext import xtest
         d = self.display
-        xtest.fake_input(d, 6, 0, x=int(x), y=int(y))  # MotionNotify
+        xtest.fake_input(d, X.MotionNotify, 0, x=int(x), y=int(y))
         d.sync()
 
     def click(self, x: int, y: int, button: str = "left", double: bool = False) -> None:
@@ -93,6 +100,7 @@ class X11InputBackend(_X11Common):
         XQueryPointer/Zephyr-style polling) moga nie zdazyc zobaczyc
         przycisnietego stanu miedzy dwoma fake_input().
         """
+        from Xlib import X
         from Xlib.ext import xtest
         d = self.display
         btn = {"left": 1, "middle": 2, "right": 3}.get(button, 1)
@@ -103,11 +111,11 @@ class X11InputBackend(_X11Common):
             time.sleep(st.move_settle_s)
         n = 2 if double else 1
         for i in range(n):
-            xtest.fake_input(d, 4, btn)   # ButtonPress
+            xtest.fake_input(d, X.ButtonPress, btn)
             d.sync()
             if st.mouse_hold_s > 0:
                 time.sleep(st.mouse_hold_s)
-            xtest.fake_input(d, 5, btn)   # ButtonRelease
+            xtest.fake_input(d, X.ButtonRelease, btn)
             d.sync()
             if i < n - 1 and st.double_gap_s > 0:
                 time.sleep(st.double_gap_s)
@@ -129,6 +137,7 @@ class X11InputBackend(_X11Common):
     }
 
     def press_combo(self, combo: str) -> None:
+        from Xlib import X
         from Xlib.ext import xtest
         d = self.display
         parts = [p.strip().lower() for p in combo.replace("+", ",").split(",") if p.strip()]
@@ -141,7 +150,7 @@ class X11InputBackend(_X11Common):
             else:
                 raise BackendError(f"Nieznany modyfikator: {p}")
         for ks in mods:
-            xtest.fake_input(d, 4, d.keysym_to_keycode(ks))
+            xtest.fake_input(d, X.KeyPress, d.keysym_to_keycode(ks))
         main_key = {"enter": 0xFF0D, "esc": 0xFF1B, "space": 0xFF20,
                     "tab": 0xFF09, "backspace": 0xFF08, "delete": 0xFFFF,
                     "del": 0xFFFF}.get(main)
@@ -152,12 +161,12 @@ class X11InputBackend(_X11Common):
         if main_key is None or d.keysym_to_keycode(main_key) == 0:
             # zwolnij trzymane modyfikatory przed rzuceniem błędu
             for ks in mods:
-                xtest.fake_input(d, 5, d.keysym_to_keycode(ks))
+                xtest.fake_input(d, X.KeyRelease, d.keysym_to_keycode(ks))
             d.sync()
             raise BackendError(f"Nieznany klawisz: {main}")
         self._send_keysym(main_key)
         for ks in reversed(mods):
-            xtest.fake_input(d, 5, d.keysym_to_keycode(ks))
+            xtest.fake_input(d, X.KeyRelease, d.keysym_to_keycode(ks))
         d.sync()
 
     # --------------------------------------------------------- wpisywanie
@@ -223,14 +232,15 @@ class X11InputBackend(_X11Common):
         (XQueryKeymap, polling DirectInput) moga nie zobaczyc wogole
         wciśnietego klawisza — stad key_hold_s (jak xdotool --delay).
         """
+        from Xlib import X
         from Xlib.ext import xtest
         d = self.display
-        xtest.fake_input(d, 4, code)   # KeyPress
+        xtest.fake_input(d, X.KeyPress, code)
         d.sync()
         hold = get_settings().key_hold_s
         if hold > 0:
             time.sleep(hold)
-        xtest.fake_input(d, 5, code)   # KeyRelease
+        xtest.fake_input(d, X.KeyRelease, code)
         d.sync()
 
     def _free_keycode(self, d) -> int:

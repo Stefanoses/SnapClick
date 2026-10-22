@@ -223,6 +223,8 @@ def test_x11_press_combo_single_char_without_keysym_to_keysym(x11_backend,
     ext = types.ModuleType("Xlib.ext")
     ext.xtest = xtest
     xlib = types.ModuleType("Xlib")
+    xlib.X = types.SimpleNamespace(KeyPress=2, KeyRelease=3, ButtonPress=4,
+                                   ButtonRelease=5, MotionNotify=6)
     monkeypatch.setitem(sys.modules, "Xlib", xlib)
     monkeypatch.setitem(sys.modules, "Xlib.ext", ext)
     monkeypatch.setitem(sys.modules, "Xlib.ext.xtest", xtest)
