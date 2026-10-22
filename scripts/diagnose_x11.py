@@ -144,10 +144,12 @@ def main() -> int:
             d.flush()
             time.sleep(0.4)
             keycode = d.keysym_to_keycode(0x61)          # 'a'
-            _xt.fake_input(d, 4, keycode)                # KeyPress
+            # XTEST bierze KOD ZDARZENIA X11: KeyPress=2, KeyRelease=3
+            # (4/5 to przyciski myszy — blad serwera + crash python-xlib)
+            _xt.fake_input(d, _X.KeyPress, keycode)
             d.flush()
             time.sleep(0.05)
-            _xt.fake_input(d, 5, keycode)                # KeyRelease
+            _xt.fake_input(d, _X.KeyRelease, keycode)
             d.flush()
             got_press = got_release = False
             deadline = time.time() + 2.0
