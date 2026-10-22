@@ -511,11 +511,14 @@ class _ClipboardOwner:
         if data is not None:
             requestor.change_property(prop, target, fmt, data)
             self.served += 1
-        self._event.SelectionNotify(
+        # XSendEvent do requestora (jak xclip): instancje zdarzen Xlib NIE
+        # maja .send() — wysyla sie je przez window.send_event(...)
+        notify = self._event.SelectionNotify(
             time=ev.time, requestor=_wid(ev.requestor),
             selection=_wid(ev.selection), target=target,
             property=prop if data is not None else 0,
-        ).send(_wid(ev.requestor), 0)
+        )
+        requestor.send_event(notify, 0)
         self.d.flush()
 
     def close(self) -> None:
