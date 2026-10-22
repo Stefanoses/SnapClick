@@ -459,10 +459,11 @@ class _ClipboardOwner:
         self.d = _display.Display()
         self.atoms = {name: self.d.intern_atom(name) for name in _CLIP_ATOMS}
         root = self.d.screen().root
+        # Zdarzenia selekcji (SelectionRequest/Clear) NIE sa sterowane maska
+        # zdarzen — X serwer dostarcza je wlascicielowi zawsze (w Xlib nie ma
+        # nawet SelectionRequestMask).
         self.win = root.create_window(0, 0, 1, 1, 0, X.CopyFromParent,
                                       X.InputOnly, X.CopyFromParent)
-        self.win.change_attributes(event_mask=X.SelectionRequestMask
-                                   | X.SelectionClearMask)
         self.win.set_selection_owner(self.atoms["CLIPBOARD"], X.CurrentTime)
         self.d.flush()
         if int(self.d.get_selection_owner(self.atoms["CLIPBOARD"])) != \
