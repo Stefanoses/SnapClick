@@ -236,13 +236,17 @@ def test_x11_group2_char_uses_altgr_not_remap(x11_backend):
 
 
 def test_x11_legacy_keysym_candidates():
-    """Uklady legacy definiuja 'ł' jako lstroke (0x1A5), nie keysym Unicode —
-    szukamy obu kandydatow."""
-    pytest.importorskip("Xlib", reason="legacy keysymy przez Xlib.XK")
+    """Uklady legacy definiuja 'ł' jako lstroke (0x1B3), nie keysym Unicode —
+    szukamy obu kandydatow. Regresja CI Linux: dawne XK.keysym_from_string
+    nie istnieje w python-xlib (AttributeError polkniety przez except) —
+    tablica keysymow musi byc numeryczna i dzialac bez Xlib.
+    Wartosci wg X11/keysymdef.h: lstroke=0x1b3, Lstroke=0x1a3, zabovedot=0x1bf."""
     from snapclick.core.platform.x11 import X11InputBackend as B
     cands = B._char_keysyms("ł")
     assert 0x01000142 in cands
-    assert 0x1A5 in cands                          # XK_lstroke
+    assert 0x1B3 in cands                          # lstroke
+    assert B._char_keysyms("Ł")[1] == 0x1A3        # Lstroke
+    assert B._char_keysyms("ż")[1] == 0x1BF        # zabovedot
     assert B._char_keysyms("a") == [0x61]
 
 

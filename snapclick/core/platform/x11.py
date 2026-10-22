@@ -229,30 +229,26 @@ class X11InputBackend(_X11Common):
             return {}
         return {lo + i: list(row) for i, row in enumerate(rows)}
 
-    # Nazwy keysymow legacy (X11/keysymdef.h, blok Latin-2) dla polskich
+    # Keysymy legacy (X11/keysymdef.h, blok Latin-2 0x01xx) dla polskich
     # liter. Uklady typu 'pl' (legacy) definiuja te znaki wlasnie takimi
     # keysymami — keysym Unicode (0x01000000+cp) nie wystepuje w tablicy,
-    # wiec szukamy obu wariantow.
-    _LEGACY_NAMES = {
-        "ą": "aogonek", "ć": "cacute", "ę": "eogonek", "ł": "lstroke",
-        "ń": "nacute", "ś": "sacute", "ż": "zabovedot", "ź": "zacute",
-        "Ą": "Aogonek", "Ć": "Cacute", "Ę": "Eogonek", "Ł": "Lstroke",
-        "Ń": "Nacute", "Ś": "Sacute", "Ż": "Zabovedot", "Ź": "Zacute",
+    # wiec szukamy obu wariantow. Wartosci numeryczne, bo python-xlib bywa
+    # kompilowany bez tabeli Latin-2 (string_to_keysym zwraca 0 — regresja
+    # widoczna dopiero na CI Linux, gdzie Xlib jest zainstalowany).
+    _LEGACY_KEYSyms = {   # wartosci wg X11/keysymdef.h (blok Latin-2)
+        "ą": 0x1B1, "ć": 0x1E6, "ę": 0x1EA, "ł": 0x1B3,
+        "ń": 0x1F1, "ś": 0x1B6, "ż": 0x1BF, "ź": 0x1BC,
+        "Ą": 0x1A1, "Ć": 0x1C6, "Ę": 0x1CA, "Ł": 0x1A3,
+        "Ń": 0x1D1, "Ś": 0x1A6, "Ż": 0x1AF, "Ź": 0x1AC,
     }
 
     @classmethod
     def _char_keysyms(cls, ch: str) -> List[int]:
         """Kandydaci keysym dla znaku: Unicode + legacy (Latin-2)."""
         out = [cls._keysym_of(ch)]
-        name = cls._LEGACY_NAMES.get(ch)
-        if name:
-            try:
-                from Xlib import XK
-                legacy = XK.keysym_from_string(name)
-                if legacy and legacy not in out:
-                    out.append(legacy)
-            except Exception:  # pragma: no cover - brak XK w mokach
-                pass
+        legacy = cls._LEGACY_KEYSyms.get(ch)
+        if legacy and legacy not in out:
+            out.append(legacy)
         return out
 
     def _native_combo(self, d, keysyms,
