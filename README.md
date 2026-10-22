@@ -172,6 +172,12 @@ tests/           platform, vision, model, engine, GUI and i18n tests
   (and text) delivery to **PostMessage** in the same dialog.
 - **Linux: "backend unavailable"?** `echo $XDG_SESSION_TYPE` must say `x11`.
   Log into an "Xorg" session.
+- **Games under Wine/Proton drop non-ASCII characters?** DirectInput games
+  poll the keyboard state, so AltGr combos can be sampled out of phase. Set
+  *Text delivery* to **Clipboard + Ctrl+V** in *Run → Input Settings* — it
+  bypasses Wine's keyboard translation entirely (no `xclip` needed). If pasted
+  text shows `?` instead of `ą/ł/ś`, give the game a Polish locale in its
+  Steam launch options: `LANG=pl_PL.UTF-8 LC_ALL=pl_PL.UTF-8 %command%`.
 
 ## Disclaimer
 
