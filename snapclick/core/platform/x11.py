@@ -36,6 +36,9 @@ class _X11Common:
 
     @property
     def display(self):
+        # Uwaga: Xlib.display.Display NIE ma metody get_error_handler()
+        # (istnieje tylko set_error_handler) — dawne sprawdzenie tutaj rzucalo
+        # AttributeError('get_error_handler') przy pierwszym uzyciu backendu.
         if self._display is None:
             disp = _xlib()
             try:
@@ -44,8 +47,6 @@ class _X11Common:
                 raise BackendError(
                     f"Nie można połączyć się z serwerem X11 (DISPLAY): {exc}"
                 ) from exc
-            if self._display.get_error_handler().__class__.__name__ == "DefaultErrorHandler":
-                pass
         return self._display
 
 

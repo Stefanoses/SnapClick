@@ -73,13 +73,20 @@ class Runner(QObject):
     # ------------------------------------------------------------- wewnetrzne
     def _run_safely(self, interpreter: Interpreter) -> None:
         try:
-            status = interpreter.run(self._ctx)
+            interpreter.run(self._ctx)
         except Exception as exc:  # pragma: no cover — ostatnia linia obrony
-            status = "error"
             self._queue.put(EngineEvent(
                 EventKind.ERROR, message=t("runner.thread_error", exc=repr(exc))))
-        # Interpreter sam emituje RUN_FINISHED przez swoj bus (podsluchany
-        # wyzej) — nie dublujemy go; kolejka go dostarczy i pump zamknie.
+            # RUN_FINISHED musi trafic do kolejki rowniez tutaj: bez niego
+            # pump nigdy sie nie zatrzyma, a GUI zostaje z zablokowanymi
+            # przyciskami Run/Stop i statusem "Stopping…" na zawsze
+            # (regresja: AttributeError w watku silnika na X11).
+            self._queue.put(EngineEvent(
+                EventKind.RUN_FINISHED, message="status=error",
+                data={"status": "error"}))
+        # Przy normalnym zakonczeniu Interpreter sam emituje RUN_FINISHED
+        # przez swoj bus (podsluchany wyzej) — nie dublujemy go; kolejka go
+        # dostarczy i pump zamknie.
 
     def _drain(self) -> None:
         """Przenosi zdarzenia z kolejki do sygnalow Qt (watki glowny)."""

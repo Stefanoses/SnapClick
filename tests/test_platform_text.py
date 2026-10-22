@@ -125,6 +125,28 @@ def x11_backend():
     yield backend, orig_keycode
 
 
+def test_x11_display_property_survives_strict_display(monkeypatch):
+    """Regresja: Xlib.display.Display NIE ma get_error_handler() (istnieje
+    tylko set_error_handler) — wlasnie to wywolanie wywrocilo pierwszy
+    przebieg na X11: AttributeError('get_error_handler')."""
+    import snapclick.core.platform.x11 as x11
+
+    class StrictDisplay:
+        """Dokladnie jak prawdziwy Display: zadnych atrybutow ponizej."""
+        def sync(self):
+            pass
+
+    class FakeXlibModule:
+        Display = StrictDisplay
+
+    monkeypatch.setattr(x11, "_xlib", lambda: FakeXlibModule)
+    backend = x11.X11InputBackend.__new__(x11.X11InputBackend)
+    backend._display = None
+    d = backend.display
+    assert isinstance(d, StrictDisplay)
+    assert backend.display is d      # polaczenie cache'owane
+
+
 def test_x11_keysym_mapping_rules():
     from snapclick.core.platform.x11 import X11InputBackend
     f = X11InputBackend._keysym_of

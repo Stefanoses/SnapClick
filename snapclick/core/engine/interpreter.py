@@ -66,9 +66,18 @@ class Interpreter:
         self.events.emit(EngineEvent(EventKind.RUN_STARTED,
                                      message=self.program.name))
         # Region okna cache'ujemy na start przebiegu (okno zwykle się nie rusza
-        # w czasie akcji; zmiana tytułu = nowy przebieg).
+        # w czasie akcji; zmiana tytułu = nowy przebieg). Awaria backendu okien
+        # NIE moze wywrocic run() ponad ponizszy try/except — RUN_FINISHED musi
+        # byc wyemitowany zawsze, inaczej GUI wisi na "Stopping…" (regresja
+        # AttributeError('get_error_handler') na X11).
         if self.windows is not None and ctx.window_region is None:
-            region = self.windows.find_region(self.program.window_title)
+            try:
+                region = self.windows.find_region(self.program.window_title)
+            except Exception as exc:  # pragma: no cover - backend bez okien
+                region = None
+                self.events.emit(EngineEvent(
+                    EventKind.LOG,
+                    message=t("engine.window_query_error", error=exc)))
             ctx.window_region = region
             if region is None and self.program.window_title:
                 self.events.emit(EngineEvent(

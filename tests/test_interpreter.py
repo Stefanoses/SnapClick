@@ -50,6 +50,39 @@ def test_click_found_template():
     assert any(e.kind is EventKind.FOUND for e in seen)
 
 
+def test_run_survives_window_backend_crash():
+    """Regresja X11: awaria backendu okien przy starcie (find_region lezal
+    poza try/except) nie moze wywrocic run() — RUN_FINISHED musi byc
+    wyemitowany, inaczej GUI wisi na 'Stopping…'."""
+    program, interp, inp, events = build_interpreter(button_visible=True)
+    start = program.add_block(BlockType.START)
+    click = program.add_block(BlockType.CLICK)
+    click.params["template"] = "button"
+    click.params["timeout"] = 0.1
+    program.set_socket(start.id, "next", click.id)
+
+    class BrokenWindows:
+        def list_windows(self):
+            raise AttributeError("get_error_handler")
+
+        def find_region(self, title_substr):
+            raise AttributeError("get_error_handler")
+
+        def activate(self, title_substr):
+            raise AttributeError("get_error_handler")
+
+    interp.windows = BrokenWindows()
+    interp.program.window_title = "MyApp"
+
+    seen = []
+    events.subscribe(lambda e: seen.append(e))
+    status = interp.run()
+    assert status == "ok"
+    assert any(e.kind is EventKind.RUN_FINISHED for e in seen)
+    # przebieg kontynuuje bez regionu okna (szukanie na calym ekranie)
+    assert ("click", 140, 90, "left", False) in inp.actions
+
+
 def test_click_not_found_stops():
     program, interp, inp, events = build_interpreter(button_visible=False)
     start = program.add_block(BlockType.START)

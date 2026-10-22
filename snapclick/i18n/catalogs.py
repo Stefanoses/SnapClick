@@ -105,6 +105,8 @@ PL: Dict[str, str] = {
     "engine.validation_errors": "błędy walidacji",
     "engine.window_not_found": "Nie znaleziono okna '{title}' — regiony "
                                "'window' będą szukać na całym ekranie.",
+    "engine.window_query_error": "Błąd listowania okien: {error} — szukam bez "
+                                 "regionu okna.",
     "engine.focus_ok": "Okno '{title}' uaktywnione (focus).",
     "engine.focus_fail": "Nie udało się uaktywnić okna '{title}' — kliknięcia "
                          "mogą nie trafiać do gry.",
@@ -395,6 +397,8 @@ EN: Dict[str, str] = {
     "engine.validation_errors": "validation errors",
     "engine.window_not_found": "Window '{title}' not found — 'window' regions "
                                "will search the whole screen.",
+    "engine.window_query_error": "Window listing error: {error} — searching "
+                                 "without a window region.",
     "engine.focus_ok": "Window '{title}' activated (focus).",
     "engine.focus_fail": "Could not activate window '{title}' — clicks may "
                          "miss the game.",
